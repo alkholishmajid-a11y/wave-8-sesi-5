@@ -2,6 +2,10 @@
 //
 import express from 'express';
 import cors from 'cors';
+
+// SESI 5 - import path/url package
+import path from "node:path";
+import {fileURLToPath} from "node:url";
 import multer from 'multer';
 import {GoogleGenAI} from '@google/genai';
 
@@ -26,10 +30,26 @@ const upload = multer(); // akan digunakan di dalam recording
 
 const ai = new GoogleGenAI({}); //instantiation menjadi object instance (OOP - Object Oriented Programming)
 
+//Sesi 5 - penambahan path
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 // inisialisasi middleware
 // contoh: app.use(namaMiddleware());
 app.use(cors()); // inisialisasi CORS (Cross-Origin Resource Sharing) sebagai middleware
 app.use(express.json());
+
+// SESI 5 - inisialisasi static directory
+// express.static(rootDirectory)
+app.use(
+    express.static(
+        path.join(__dirname,'static') // rootDirectory
+        // akan set route `/` sebagai static directory dengan
+        // folder `static` atau nama yang kita set sebagai
+        // directory tujuan; tetapi ketika ada ada rote handler yg di-set di bawahnya
+        // route handler tersebut akan diutamakan
+    ),
+);
 
 // inisialisasi routing
 // contoh: app.get(), app.post(), app.put(), dll 
@@ -189,6 +209,102 @@ app.post("/generate-from-audio",upload.single("audio"),async(req,res) => {
         res.status(500).json({message: e.message})
     }
 });
+// LANJUT SESI 5 01:36:42
+app.post("/api/chat", async(req,res) => {
+    const{conversation} = req.body;
+    try{
+        // satpam #1: Cek conversation apakah berupa Array atau tidak
+        //            dengan `Array.isArray{}
+       if (!Array.isArray(conversation)) {
+        throw new Error("Conversation harus berupa array!");
+       }
+       // satpam #2: cek setiap pesan dalam conversation, apakah valid atau tidak
+       let messageIsValid = true;
+
+       if(conversation.length === 0) {
+        throw new Error("Conversation tidak boleh kosong!");
+       }
+
+
+       conversation.forEach(message => {
+        // bisa ditambah satu kondisi lagi untuk cek variable messageIsValid
+        // di sini
+
+
+        // KOndisi #1 -- message harus berupa object dan bukan `null`
+        if (!message || typeof message !== 'object'){
+            messageIsValid = false;
+            return;
+        }
+
+        const keys = Object.keys(message);
+        const objectHasValidKeys = keys.every(key => 
+            ["text", "role"].includes(key))
+        ;
+
+        // looping kondisi di dalam array
+        // .every() --> &&-nya si if --> jika ada 1 false, semuanya false
+        // .some() --> \\-nya si if --> 1 true, semuanya true
+
+
+        // Kondisi #2 -- message harus punya struktur yang valid
+        if(keys.length !==2 ||objectHasValidKeys){
+            messageIsValid = false;
+            return;
+        }
+
+        if(Object.keys(messages)){}
+
+        const{text, role} = message;
+
+
+        // Kondisi 3A -- role harus valid
+        if(!["model","user"].includes(role)){
+            messageIsValid = false;
+            return;
+        }
+        // Kondisi 3B -- text harus valid
+
+        if(!text || typeof text !== 'string') {
+            messageIsValid = false;
+            return;
+        }
+       });
+
+       if(!messageIsValid) {
+        throw new Error("Message harus valid!")
+       }
+
+       // proses dagingnya
+
+       const contents = conversation.map(({role, text}) =>({
+        role,
+        parts:[{text}]
+       }));
+
+       const aiResponse = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents,
+        config: {
+            systemInstruction: "Harus menuliskan dengan Latex."
+        }
+       })
+
+       res.status(200).json({
+        success: true,
+        message: "Berhasil dibalas oleh Google Gemini!",
+        data: aiResponse.text
+       });
+
+    } catch(e){
+        res.status(500).json({
+            success: false,
+            message: e.message,
+            data: null
+        });
+    }
+});
+
 
 // server-nya harus di-serve dulu!
 app.listen(
